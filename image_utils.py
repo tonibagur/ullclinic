@@ -156,7 +156,6 @@ def draw_rectangles(image_file,rectangles):
     im = Image.open(image_file)
     draw = ImageDraw.Draw(im)
     for i in range(rectangles.shape[0]):
-        print "Drawing rectangle",rectangles[i]
         draw.rectangle([rectangles[i][2],rectangles[i][0],rectangles[i][3],rectangles[i][1]],outline=(255,0,0))
     im.save(image_file.replace('.png',"_segmented.png"))
 
@@ -170,7 +169,6 @@ def mid_points(rectangles):
     m=rectangles.shape[0]
     X=(rectangles[:,0]+rectangles[:,1]).reshape(m,1)/2.
     Y = (rectangles[:,2] + rectangles[:,3]).reshape(m,1) / 2.
-    print rectangles.shape,X.shape,Y.shape
     result=np.concatenate([X,Y],axis=1)
     return result
 
@@ -182,14 +180,6 @@ def distances(points1,points2):
     :return: array of m x 1
     '''
     m=points1.shape[0]
-    print "m",m
-    print "shape",points1.shape
-    print "points1",points1
-    print "points2",points2
-    print "(points1[:,0]-points2[:,0])",(points1[:,0]-points2[:,0])
-    print "(points1[:,0]",points1[:,0]
-    print "points2[:,0])",(points2[:,0])
-    print "np.sum",np.sum([(points1[:,0]-points2[:,0]).reshape(m,1)**2,(points1[:,1]-points2[:,1]).reshape(m,1)**2],axis=0)
     D=np.sum([(points1[:,0]-points2[:,0]).reshape(m,1)**2,(points1[:,1]-points2[:,1]).reshape(m,1)**2],axis=0).reshape(m,1)**0.5
     return D
 
@@ -205,10 +195,6 @@ def filter_rectangles(rectangles,distmin):
         result_mid=mid_points(result)
         current_distances=distances(result_mid,current_mid)
         arg_dist_min=np.argmin(current_distances,axis=0)
-        print "curren_mid", current_mid
-        print "result_mid", result_mid
-        print "current_distances",current_distances
-        print "argmin",arg_dist_min,current_distances[arg_dist_min]
         if current_distances[arg_dist_min]>=distmin:
             #Simple version of algorithm, first rectangle wins
             result=np.concatenate((result,current),axis=0)
@@ -229,9 +215,3 @@ def patches_of_image(image_file,w_w,w_h):
     images=np.concatenate(images,axis=1)
     slices=np.concatenate(slices,axis=1).reshape(1,images.shape[1],4)
     return images,slices
-
-
-
-
-
-
