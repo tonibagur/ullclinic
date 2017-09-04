@@ -185,6 +185,8 @@ def distances(points1,points2):
 
 
 def filter_rectangles(rectangles,distmin):
+    if rectangles.shape[0]==0:
+        return rectangles
     result=rectangles[0,:].reshape((1,4))
     rectangles = rectangles[1:, :]
     while rectangles.shape[0]>0:
@@ -198,6 +200,9 @@ def filter_rectangles(rectangles,distmin):
         if current_distances[arg_dist_min]>=distmin:
             #Simple version of algorithm, first rectangle wins
             result=np.concatenate((result,current),axis=0)
+        else:
+            for i in range(4):
+                result[arg_dist_min,i]=(result[arg_dist_min,i]+current[0,i])/2
     return result
 
 
