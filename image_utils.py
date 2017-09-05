@@ -8,35 +8,28 @@ CUT_SIZE=(40,40)
 
 #image.nonzero()
 
-def find_rectangle(image,i,j):
-    found=False
-    while j<image.shape[1] and not found:
-        found=image[i,j]!=0
-        if not found:
-            j+=1
-    if found:
-        right=find_black_x(image,i,j)
-        bottom=find_black_y(image,i,j)
-        if image[i-1,j]==0:
-            yield (i,j,bottom,right)
-        for r in find_rectangle(image,i,right):
-            yield r
+def generate_images_folder(folder):
+    data_files = get_data_files(folder)
+    for df in data_files:
+        process_data_file(df)
 
-def find_black_y(image,i,j):
-    found=False
-    while i<image.shape[0] and not found:
-        found=image[i,j]==0
-        if not found:
-            i+=1
-    return i
+def process_data_file(data_file):
+    normal = mpimg.imread(data_file.format(''))
+    positive = mpimg.imread(data_file.format('_1'))
+    negative = mpimg.imread(data_file.format('_0'))
+    normal = normal[:, :, 0:3]
+    positive = reshape_bw(positive)
+    negative = reshape_bw(negative)
+    folder=os.path.join(*os.path.split(data_file)[:-1])
+    print "folder",folder
+    cut_images(normal,positive,'1',folder,CUT_SIZE)
+    cut_images(normal, negative, '0', folder,CUT_SIZE)
 
-def find_black_x(image,i,j):
-    found=False
-    while j<image.shape[1] and not found:
-        found=image[i,j]==0
-        if not found:
-            j+=1
-    return j
+def reshape_bw(im):
+    im = im[:, :, 0]
+    shape = im.shape
+    im2 = np.reshape(im, (shape[0], shape[1]))
+    return im2
 
 def cut_images(source_image,mask_image,class_id,folder,desired_size):
     s=0
@@ -65,10 +58,36 @@ def cut_images(source_image,mask_image,class_id,folder,desired_size):
                                 im.save(os.path.join(folder,fsave))
             s+=1
 
-def generate_images_folder(folder):
-    data_files = get_data_files(folder)
-    for df in data_files:
-        process_data_file(df)
+def find_rectangle(image,i,j):
+    found=False
+    while j<image.shape[1] and not found:
+        found=image[i,j]!=0
+        if not found:
+            j+=1
+    if found:
+        right=find_black_x(image,i,j)
+        bottom=find_black_y(image,i,j)
+        if image[i-1,j]==0:
+            yield (i,j,bottom,right)
+        for r in find_rectangle(image,i,right):
+            yield r
+
+
+def find_black_y(image,i,j):
+    found=False
+    while i<image.shape[0] and not found:
+        found=image[i,j]==0
+        if not found:
+            i+=1
+    return i
+
+def find_black_x(image,i,j):
+    found=False
+    while j<image.shape[1] and not found:
+        found=image[i,j]==0
+        if not found:
+            j+=1
+    return j
 
 
 def get_images_data(folder,shuffle=True):
@@ -98,12 +117,12 @@ def get_images_data(folder,shuffle=True):
     else:
         return X,Y,file_names
 
+
 def get_image_data(data_file):
     im=mpimg.imread(data_file.format(''))
     #print im.shape
     im = im[:, :, 0:3].reshape(-1,1)
     return im
-
 
 def get_data_files(folder,only_dir=False):
     if not only_dir:
@@ -113,25 +132,6 @@ def get_data_files(folder,only_dir=False):
     data_files = [f(x) for x in os.listdir(folder) if
                   (os.path.isdir(os.path.join(folder, x)) and x!=u'classes')]
     return data_files
-
-
-def reshape_bw(im):
-    im = im[:, :, 0]
-    shape = im.shape
-    im2 = np.reshape(im, (shape[0], shape[1]))
-    return im2
-
-def process_data_file(data_file):
-    normal = mpimg.imread(data_file.format(''))
-    positive = mpimg.imread(data_file.format('_1'))
-    negative = mpimg.imread(data_file.format('_0'))
-    normal = normal[:, :, 0:3]
-    positive = reshape_bw(positive)
-    negative = reshape_bw(negative)
-    folder=os.path.join(*os.path.split(data_file)[:-1])
-    print "folder",folder
-    cut_images(normal,positive,'1',folder,CUT_SIZE)
-    cut_images(normal, negative, '0', folder,CUT_SIZE)
 
 def shuffle_data_set(X,Y,file_names):
     np.random.seed(2)

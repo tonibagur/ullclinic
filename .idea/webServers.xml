@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="0c1c6d58-665a-4a04-aca3-63c01d3a801a" name="despatx-ai" url="http://despatx.coneptum.com">
+        <fileTransfer host="despatx.coneptum.com" port="2299" rootFolder="/home/coneptum/dev/ullclinic" accessType="SFTP">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" />
+          </advancedOptions>
+          <option name="port" value="2299" />
+        </fileTransfer>
+      </webServer>
+      <webServer id="ed526ef3-d562-4ac8-901d-08293c5c3181" name="despatx-ai-local" url="http://192.168.1.252">
+        <fileTransfer host="192.168.1.252" port="22" rootFolder="/home/coneptum/dev/ullclinic" accessType="SFTP">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" />
+          </advancedOptions>
+          <option name="port" value="22" />
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>
