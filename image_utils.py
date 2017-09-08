@@ -2,11 +2,85 @@ from PIL import Image,ImageDraw
 import numpy as np
 import matplotlib.image as mpimg
 import os
+import tensorflow as tf
+from object_detection.utils import dataset_util
+
 
 NUM_ZEROS=5
 CUT_SIZE=(40,40)
 
 #image.nonzero()
+
+def generate_images_folder_v2(folder):
+    writer = tf.python_io.TFRecordWriter(os.path.join(folder, '../tf_record/tf.record'))
+    data_files = get_data_files(folder)
+    for df in data_files:
+        for tf_example in process_data_file_v2(df):
+            writer.write(tf_example.SerializeToString())
+    writer.close()
+
+def process_data_file_v2(data_file):
+    normal = mpimg.imread(data_file.format(''))
+    positive = mpimg.imread(data_file.format('_1'))
+    negative = mpimg.imread(data_file.format('_0'))
+    normal = normal[:, :, 0:3]
+    positive = reshape_bw(positive)
+    folder=os.path.join(*os.path.split(data_file)[:-1])
+    print "folder",folder
+    for flipud in [0,1]:
+        if flipud:
+            normal2,positive2=np.flipud(normal),np.flipud(positive)
+        else:
+            normal2,positive2=normal,positive
+        for fliplr in [0,1]:
+            if fliplr:
+                normal2, positive2=np.fliplr(normal2),np.fliplr(positive2)
+            else:
+                normal2, positive2 = normal2, positive2
+            yield cut_images_v2(normal2,positive2,folder,flipud,fliplr)
+
+def cut_images_v2(source_image,mask_image,folder,flipud,fliplr):
+    s=0
+    im_file = '../tf_record/{0}.png'.format(folder.split('/')[-1])
+    im = Image.fromarray(source_image)
+    im_path = os.path.join(folder, im_file)
+    im.save(im_path)
+    height,width=source_image.shape[:2]
+    filename=None # The source of the image will be ecoded_image_data
+    encoded_image_data=open(im_path,'rb').read()
+    image_format=b'png'
+    xmins = []  # List of normalized left x coordinates in bounding box (1 per box)
+    xmaxs = []  # List of normalized right x coordinates in bounding box
+    # (1 per box)
+    ymins = []  # List of normalized top y coordinates in bounding box (1 per box)
+    ymaxs = []  # List of normalized bottom y coordinates in bounding box
+    # (1 per box)
+    classes_text = []  # List of string class name of bounding box (1 per box)
+    classes = []  # List of integer class id of bounding box (1 per box)
+
+
+    for i in range(mask_image.shape[0]):
+        for r in find_rectangle(mask_image,i,0):
+            ymins.append(float(r[0])/height)
+            ymaxs.append(float(r[2])/height)
+            xmins.append(float(r[1]) / width)
+            xmaxs.append(float(r[3]) / width)
+
+    tf_example = tf.train.Example(features=tf.train.Features(feature={
+        'image/height': dataset_util.int64_feature(height),
+        'image/width': dataset_util.int64_feature(width),
+        'image/filename': dataset_util.bytes_feature(filename),
+        'image/source_id': dataset_util.bytes_feature(filename),
+        'image/encoded': dataset_util.bytes_feature(encoded_image_data),
+        'image/format': dataset_util.bytes_feature(image_format),
+        'image/object/bbox/xmin': dataset_util.float_list_feature(xmins),
+        'image/object/bbox/xmax': dataset_util.float_list_feature(xmaxs),
+        'image/object/bbox/ymin': dataset_util.float_list_feature(ymins),
+        'image/object/bbox/ymax': dataset_util.float_list_feature(ymaxs),
+        'image/object/class/text': dataset_util.bytes_list_feature(classes_text),
+        'image/object/class/label': dataset_util.int64_list_feature(classes),
+    }))
+    return tf_example
 
 def generate_images_folder(folder):
     data_files = get_data_files(folder)
