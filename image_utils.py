@@ -12,9 +12,10 @@ CUT_SIZE=(40,40)
 #image.nonzero()
 
 def generate_images_folder_v2(folder):
-    writer = tf.python_io.TFRecordWriter(os.path.join(folder, '../tf_record/tf.record'))
+    writer = tf.python_io.TFRecordWriter(os.path.join(folder, 'tf_record/tf.record'))
     data_files = get_data_files(folder)
     for df in data_files:
+        print "df",df
         for tf_example in process_data_file_v2(df):
             writer.write(tf_example.SerializeToString())
     writer.close()
@@ -22,11 +23,9 @@ def generate_images_folder_v2(folder):
 def process_data_file_v2(data_file):
     normal = mpimg.imread(data_file.format(''))
     positive = mpimg.imread(data_file.format('_1'))
-    negative = mpimg.imread(data_file.format('_0'))
     normal = normal[:, :, 0:3]
     positive = reshape_bw(positive)
     folder=os.path.join(*os.path.split(data_file)[:-1])
-    print "folder",folder
     for flipud in [0,1]:
         if flipud:
             normal2,positive2=np.flipud(normal),np.flipud(positive)
@@ -41,8 +40,9 @@ def process_data_file_v2(data_file):
 
 def cut_images_v2(source_image,mask_image,folder,flipud,fliplr):
     s=0
-    im_file = '../tf_record/{0}.png'.format(folder.split('/')[-1])
-    im = Image.fromarray(source_image)
+    print "folder",folder,flipud,fliplr
+    im_file = '../tf_record/{0}_{1}_{2}.png'.format(folder.split('/')[-1],flipud,fliplr)
+    im = Image.fromarray(np.uint8(source_image*255))
     im_path = os.path.join(folder, im_file)
     im.save(im_path)
     height,width=source_image.shape[:2]
@@ -65,12 +65,14 @@ def cut_images_v2(source_image,mask_image,folder,flipud,fliplr):
             ymaxs.append(float(r[2])/height)
             xmins.append(float(r[1]) / width)
             xmaxs.append(float(r[3]) / width)
+            classes_text.append(b'nucli')
+            classes.append(1)
 
     tf_example = tf.train.Example(features=tf.train.Features(feature={
         'image/height': dataset_util.int64_feature(height),
         'image/width': dataset_util.int64_feature(width),
-        'image/filename': dataset_util.bytes_feature(filename),
-        'image/source_id': dataset_util.bytes_feature(filename),
+        #'image/filename': dataset_util.bytes_feature(filename),
+        'image/source_id': dataset_util.bytes_feature("{0}_{1}_{2}".format(folder,flipud,fliplr)),
         'image/encoded': dataset_util.bytes_feature(encoded_image_data),
         'image/format': dataset_util.bytes_feature(image_format),
         'image/object/bbox/xmin': dataset_util.float_list_feature(xmins),
@@ -204,7 +206,7 @@ def get_data_files(folder,only_dir=False):
     else:
         f=lambda x:os.path.join(folder, x)
     data_files = [f(x) for x in os.listdir(folder) if
-                  (os.path.isdir(os.path.join(folder, x)) and x!=u'classes')]
+                  (os.path.isdir(os.path.join(folder, x)) and x not in ('classes','tf_record') and not 'ipynb_checkpoints' in x)]
     return data_files
 
 def shuffle_data_set(X,Y,file_names):
