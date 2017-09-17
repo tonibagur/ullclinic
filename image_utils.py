@@ -3,7 +3,10 @@ import numpy as np
 import matplotlib.image as mpimg
 import os
 import tensorflow as tf
-from object_detection.utils import dataset_util
+try:
+    from object_detection.utils import dataset_util
+except:
+    print "object_detection.utils not imported"
 
 
 NUM_ZEROS=5
@@ -86,8 +89,20 @@ def cut_images_v2(source_image,mask_image,folder,flipud,fliplr):
 
 def generate_images_folder(folder):
     data_files = get_data_files(folder)
+    clean_folder(folder)
     for df in data_files:
         process_data_file(df)
+
+def clean_folder(folder):
+    classes_dir=os.path.join(folder,'classes')
+    for sub in os.listdir(classes_dir):
+        class_dir=os.path.join(classes_dir,sub)
+        if os.path.isdir(class_dir):
+            for f in os.listdir(class_dir):
+                full_file = os.path.join(class_dir, f)
+                if os.path.isfile(full_file):
+                    os.unlink(full_file)
+
 
 def process_data_file(data_file):
     normal = mpimg.imread(data_file.format(''))
@@ -107,12 +122,12 @@ def reshape_bw(im):
     im2 = np.reshape(im, (shape[0], shape[1]))
     return im2
 
-def cut_images(source_image,mask_image,class_id,folder,desired_size):
+def cut_images(source_image,mask_image,class_id,folder,desired_size,max_offset=15,num_offset=4):
     s=0
     for i in range(mask_image.shape[0]):
         for r in find_rectangle(mask_image,i,0):
-            for i,axis_0 in enumerate([-2,0,2]):
-                for j,axis_1 in enumerate([-2,0,2]):
+            for axis_0 in np.random.choice(np.arange(-max_offset,max_offset+1),size=num_offset,replace=False):
+                for axis_1 in np.random.choice(np.arange(-max_offset,max_offset+1),size=num_offset,replace=False):
                     if r[0]+axis_0 > 0 and r[1]+axis_1>0 \
                         and r[2]+axis_0 < source_image.shape[0] and r[3]+axis_1 < source_image.shape[1]:
                         for fliplr in [0,1]:
@@ -124,8 +139,7 @@ def cut_images(source_image,mask_image,class_id,folder,desired_size):
                                 if flipud:
                                     array=np.flipud(array)
                                 im=Image.fromarray(array).resize(desired_size, Image.ANTIALIAS)
-
-                                fsave='../classes/cl{0}/cl{0}_{6}_{1}_{2}_{3}_{4}_{5}.png'.format(class_id,str(s).zfill(NUM_ZEROS),i,j,fliplr,flipud,folder.split('/')[-1])
+                                fsave='../classes/cl{0}/cl{0}_{6}_{1}_{2}_{3}_{4}_{5}.png'.format(class_id,str(s).zfill(NUM_ZEROS),axis_0,axis_1,fliplr,flipud,folder.split('/')[-1])
                                 #print fsave
                                 #print array.shape
                                 #print r[0],r[2],r[1],r[3]
@@ -166,10 +180,16 @@ def find_black_x(image,i,j):
     return j
 
 
+def get_py_px(file_name):
+    return file_name.split('_')[5:7]
+
+
 def get_images_data(folder,shuffle=True):
     data_files = get_data_files(os.path.join(folder,'classes'),True)
     X=None
     Y=None
+    PY=None
+    PX=None
     file_names=None
     for df in data_files:
         for f in os.listdir(df):
@@ -178,20 +198,27 @@ def get_images_data(folder,shuffle=True):
                 newX = get_image_data(os.path.join(df, f))
                 #print newX.shape
                 newY = np.array([1 if f.startswith('cl1') else 0]).reshape(1,1)
+                py,px=get_py_px(f)
+                newPY = np.array([int(py)]).reshape(1,1)
+                newPX = np.array([int(px)]).reshape(1,1)
                 new_file=np.array([f]).reshape(1,1)
                 if type(X)!=type(None):
                     X=np.concatenate((X,newX),axis=1)
                     Y=np.concatenate((Y,newY),axis=1)
+                    PX=np.concatenate((PX,newPX),axis=1)
+                    PY=np.concatenate((PY,newPY),axis=1)
                     file_names=np.concatenate((file_names,new_file),axis=1)
                 else:
                     X=newX
                     Y=newY
+                    PY=newPY
+                    PX=newPX
                     file_names=new_file
 
     if shuffle:
-        return shuffle_data_set(X,Y,file_names)
+        return shuffle_data_set(X,Y,file_names,PY,PX)
     else:
-        return X,Y,file_names
+        return X,Y,file_names,PY,PX
 
 
 def get_image_data(data_file):
@@ -209,13 +236,15 @@ def get_data_files(folder,only_dir=False):
                   (os.path.isdir(os.path.join(folder, x)) and x not in ('classes','tf_record') and not 'ipynb_checkpoints' in x)]
     return data_files
 
-def shuffle_data_set(X,Y,file_names):
+def shuffle_data_set(X,Y,file_names,PY,PX):
     np.random.seed(2)
     permutation=np.random.permutation(X.shape[1])
     X_perm=X[:,permutation]
     Y_perm=Y[:,permutation]
     file_names_perm=file_names[:,permutation]
-    return X_perm,Y_perm,file_names_perm
+    PY_perm=PY[:,permutation]
+    PX_perm=PX[:,permutation]
+    return X_perm,Y_perm,file_names_perm,PY_perm,PX_perm
 
 def get_sliding_windows(w,h,w_w,w_h,stride):
     i=0
@@ -228,12 +257,19 @@ def get_sliding_windows(w,h,w_w,w_h,stride):
         i+=stride
     yield (h-w_h,h,w - w_w, w)
 
-def draw_rectangles(image_file,rectangles):
+def draw_rectangles(image_file,rectangles,color=(255,0,0)):
     im = Image.open(image_file)
     draw = ImageDraw.Draw(im)
-    for i in range(rectangles.shape[0]):
-        draw.rectangle([rectangles[i][2],rectangles[i][0],rectangles[i][3],rectangles[i][1]],outline=(255,0,0))
+    draw_rectangles_on_image(color, draw, rectangles)
     im.save(image_file.replace('.png',"_segmented.png"))
+
+
+def draw_rectangles_on_image(color, draw, rectangles):
+    for i in range(rectangles.shape[0]):
+        midx = int((rectangles[i][2] + rectangles[i][3]) / 2.)
+        midy = int((rectangles[i][0] + rectangles[i][1]) / 2.)
+        draw.ellipse([midx - 1, midy - 1, midx + 1, midy + 1], outline=color, fill=color)
+
 
 def mid_points(rectangles):
     '''
