@@ -23,6 +23,7 @@ class ImagePoints(object):
     def set_data(self, x, y,alpha=None):
         self.x = [u for u in x]
         self.y = [u for u in y]
+        #print self.x,self.y
         self.yg = [u for u in self.n1 - np.array(y)]
         if type(alpha)!=type(None):
             self.alpha=alpha
@@ -34,7 +35,7 @@ class ImagePoints(object):
         self.x.append(x)
         self.yg.append(y)
         self.y = [u for u in self.n1 - np.array(self.yg)]
-        print self.yg
+        #print self.yg
         self.alpha.append(1)
         self.source.data = dict(x=self.x, y=self.yg,alpha=self.alpha)
 
@@ -176,6 +177,12 @@ def indexs_from_mosaic_points(points, w=50, h=50):
     #print indexs
     return indexs
 
+def indexs_from_mosaic_points_dict(data,w=50,h=50):
+    result={}
+    for k in data:
+        result[k]=indexs_from_mosaic_points(data[k],w,h)
+    return result
+
 def build_single_cnn_model(shape=(40,40,3),
                            kernel_size = 10,
                             pool_size = 2 ,
@@ -185,7 +192,7 @@ def build_single_cnn_model(shape=(40,40,3),
                             hidden_size = 100 ,
                            fully_connected_padding='valid',
                            fully_connected_kernel=(10,10),
-                           num_classes=2):
+                           num_classes=2,out_flat=False):
 
     inp = Input(shape=shape)  # depth goes last in TensorFlow back-end (first in Theano)
     # inp = Input(shape=(612, 816, 3)) # depth goes last in TensorFlow back-end (first in Theano)
@@ -208,10 +215,14 @@ def build_single_cnn_model(shape=(40,40,3),
     out = Dense(2, activation='softmax')(drop_3)'''
     # conv_5= Convolution2D(30,(10,10),strides=(1,1),padding='same',activation='relu')(drop_2)
     # Per nuclis millor 100
-    conv_5 = Convolution2D(hidden_size, fully_connected_kernel, strides=(1, 1), padding=fully_connected_padding, activation='relu')(drop_2)
+    conv_5 = Convolution2D(hidden_size, fully_connected_kernel, strides=fully_connected_kernel, padding=fully_connected_padding, activation='relu')(drop_2)
     drop_3 = Dropout(drop_prob_1)(conv_5)
     conv_6 = Convolution2D(num_classes, (1, 1), padding='valid', activation='softmax')(drop_3)
-    out = Flatten()(conv_6)
+    if out_flat:
+        out = Flatten()(conv_6)
+    else:
+        out = conv_6
+
 
     model = Model(inputs=inp, outputs=out)  # To define a model, just specify its input and output layers
     adam = keras.optimizers.Adam(lr=0.0001, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
@@ -220,3 +231,23 @@ def build_single_cnn_model(shape=(40,40,3),
                   optimizer=adam,  # using the Adam optimiser
                   metrics=['accuracy'])
     return model
+
+
+def get_image_type_points(image,file_name,types):
+    result={}
+    for t in types:
+        result[t]=ImagePoints(image)
+        try:
+            abreviate="".join([x[0] for x in t.split('_')])
+            #print abreviate
+            #print t,file_name.replace('.jpg', '-{0}.json'.format(abreviate))
+            result[t].load(file_name.replace('.jpg', '-{0}.json'.format(abreviate)))
+            #print result
+        except:
+            print "Unable to load file",file_name.replace('.jpg', '-{0}.json'.format(abreviate))
+    return result
+
+def save_image_type_points(data_points,file_name):
+    for t in data_points:
+        abreviate = "".join([x[0] for x in t.split('_')])
+        data_points[t].save(file_name.replace('.jpg', '-{0}.json'.format(abreviate)))
