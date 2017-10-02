@@ -9,7 +9,23 @@ from keras.layers import Input, Convolution2D, MaxPooling2D, Dense, Dropout, Fla
 from keras.utils import np_utils  # utilities for one-hot encoding of ground truth values
 import keras
 import numpy as np
+import matplotlib.image as mpimg
+import scipy
 
+
+TYPES=['white_pawns',
+       'black_pawns',
+       'white_rooks',
+       'black_rooks',
+       'white_bishops',
+       'black_bishops',
+       'white_nights',
+       'black_nights',
+       'white_kings',
+       'black_kings',
+       'white_queens',
+       'black_queens',
+       'empty']
 
 class ImagePoints(object):
     def __init__(self, image, line_color='#FF0000', fill_color='#FF0000'):
@@ -251,3 +267,30 @@ def save_image_type_points(data_points,file_name):
     for t in data_points:
         abreviate = "".join([x[0] for x in t.split('_')])
         data_points[t].save(file_name.replace('.jpg', '-{0}.json'.format(abreviate)))
+
+
+def open_image(file_name,file_type=1):
+    img = mpimg.imread(file_name) * file_type
+    alpha = np.ones((img.shape[0], img.shape[1], 1)) * 255
+    img = np.concatenate([img[:, :, :3], alpha], axis=2)
+    return img
+
+def generate_images_from_chess_files(file_names):
+    x_list=[]
+    y_list=[]
+    for f in file_names:
+        img=open_image(f)
+        X = squares_of_board(img, offset_x=40, offset_y=100, board_size=400)
+        im_total = image_grid(X, num_rows=8, num_cols=8, w=50, h=50, margin=0)
+        points = get_image_type_points(im_total, f, TYPES)
+        dict_indexs = indexs_from_mosaic_points_dict(points, w=50, h=50)
+        Y = np.zeros((X.shape[0], 13))
+        for i, t in enumerate(TYPES):
+            Y[dict_indexs[t], i] = 1
+        x_list.append(X)
+        y_list.append(Y)
+    X=np.concatenate(x_list)
+    Y=np.concatenate(y_list)
+    return X,Y
+
+
