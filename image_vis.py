@@ -11,6 +11,7 @@ import keras
 import numpy as np
 import matplotlib.image as mpimg
 import scipy
+import random
 
 
 TYPES=['white_pawns',
@@ -158,13 +159,30 @@ def dataset_from_points(points,im_size=40):
     print X.shape, Y.shape
     return X,Y
 
-def squares_of_board(image, offset_x=40, offset_y=100, board_size=400):
+def squares_of_board(image, offset_x=40, offset_y=100, board_size=400,random_noise=False):
+    print image.shape
     x_list=[]
     square_size=board_size/8
     for i in range(8):
         for j in range(8):
-            x_list.append(image[offset_y + i * square_size:offset_y + (i + 1) * square_size,
-                              offset_x+j*square_size:offset_x+(j+1)*square_size].reshape(1,square_size,square_size,4)[:, :, :, :3])
+            try:
+                offset_y2 = offset_y
+                offset_x2 = offset_x
+                if random_noise:
+                    offset_x2+=random.randint(-5,5)
+                    offset_y2+=random.randint(-5,5)
+                im = image[offset_y2 + i * square_size:offset_y2 + (i + 1) * square_size,
+                     offset_x2 + j * square_size:offset_x2 + (j + 1) * square_size].reshape(1, square_size, square_size,
+                                                                            4)[:, :, :, :3]
+                if random_noise and random.randint(0,1):
+                    im=np.flipud(im)
+                if random_noise and random.randint(0,1):
+                    im=np.fliplr(im)
+                x_list.append(im)
+            except:
+                print "image outside of bands"
+                import traceback
+                traceback.print_exc()
     X=np.concatenate(x_list,axis=0)
     return X
 
@@ -199,16 +217,17 @@ def indexs_from_mosaic_points_dict(data,w=50,h=50):
         result[k]=indexs_from_mosaic_points(data[k],w,h)
     return result
 
-def build_single_cnn_model(shape=(40,40,3),
+def build_single_cnn_model(shape=(50,50,3),
                            kernel_size = 10,
-                            pool_size = 2 ,
-                            conv_depth_1 = 32 ,
-                            conv_depth_2 = 64 ,
-                            drop_prob_1 = 0.5 ,
-                            hidden_size = 100 ,
-                           fully_connected_padding='valid',
-                           fully_connected_kernel=(10,10),
-                           num_classes=2,out_flat=False):
+                           pool_size_1 = 2,
+                           pool_size_2 = 5,
+                           conv_depth_1 = 32,
+                           conv_depth_2 = 64,
+                           drop_prob_1 = 0.5,
+                           hidden_size = 100, fully_connected_padding='valid',
+                           fully_connected_kernel=(5,5),
+                           final_strides=(5,5),
+                           num_classes=13, out_flat=True):
 
     inp = Input(shape=shape)  # depth goes last in TensorFlow back-end (first in Theano)
     # inp = Input(shape=(612, 816, 3)) # depth goes last in TensorFlow back-end (first in Theano)
@@ -216,12 +235,12 @@ def build_single_cnn_model(shape=(40,40,3),
     # Conv [32] -> Conv [32] -> Pool (with dropout on the pooling layer)
     conv_1 = Convolution2D(conv_depth_1, (kernel_size, kernel_size), padding='same', activation='relu')(inp)
     conv_2 = Convolution2D(conv_depth_1, (kernel_size, kernel_size), padding='same', activation='relu')(conv_1)
-    pool_1 = MaxPooling2D(pool_size=(pool_size, pool_size))(conv_2)
+    pool_1 = MaxPooling2D(pool_size=(pool_size_1, pool_size_1))(conv_2)
     drop_1 = Dropout(drop_prob_1)(pool_1)
     # Conv [64] -> Conv [64] -> Pool (with dropout on the pooling layer)
     conv_3 = Convolution2D(conv_depth_2, (kernel_size, kernel_size), padding='same', activation='relu')(drop_1)
     conv_4 = Convolution2D(conv_depth_2, (kernel_size, kernel_size), padding='same', activation='relu')(conv_3)
-    pool_2 = MaxPooling2D(pool_size=(pool_size, pool_size))(conv_4)
+    pool_2 = MaxPooling2D(pool_size=(pool_size_2, pool_size_2))(conv_4)
     drop_2 = Dropout(drop_prob_1)(pool_2)
     # Now flatten to 1D, apply FC -> ReLU (with dropout) -> softmax
 
@@ -231,7 +250,7 @@ def build_single_cnn_model(shape=(40,40,3),
     out = Dense(2, activation='softmax')(drop_3)'''
     # conv_5= Convolution2D(30,(10,10),strides=(1,1),padding='same',activation='relu')(drop_2)
     # Per nuclis millor 100
-    conv_5 = Convolution2D(hidden_size, fully_connected_kernel, strides=fully_connected_kernel, padding=fully_connected_padding, activation='relu')(drop_2)
+    conv_5 = Convolution2D(hidden_size, fully_connected_kernel, strides=final_strides, padding=fully_connected_padding, activation='relu')(drop_2)
     drop_3 = Dropout(drop_prob_1)(conv_5)
     conv_6 = Convolution2D(num_classes, (1, 1), padding='valid', activation='softmax')(drop_3)
     if out_flat:
@@ -273,14 +292,16 @@ def open_image(file_name,file_type=1):
     img = mpimg.imread(file_name) * file_type
     alpha = np.ones((img.shape[0], img.shape[1], 1)) * 255
     img = np.concatenate([img[:, :, :3], alpha], axis=2)
+    if img.shape[0]>2000:
+        img = scipy.misc.imresize(img, (img.shape[0] / 4, img.shape[1] / 4))
     return img
 
 def generate_images_from_chess_files(file_names):
     x_list=[]
     y_list=[]
-    for f in file_names:
+    for f in file_names*100:
         img=open_image(f)
-        X = squares_of_board(img, offset_x=40, offset_y=100, board_size=400)
+        X = squares_of_board(img, offset_x=40, offset_y=100, board_size=400,random_noise=True)
         im_total = image_grid(X, num_rows=8, num_cols=8, w=50, h=50, margin=0)
         points = get_image_type_points(im_total, f, TYPES)
         dict_indexs = indexs_from_mosaic_points_dict(points, w=50, h=50)
@@ -293,4 +314,154 @@ def generate_images_from_chess_files(file_names):
     Y=np.concatenate(y_list)
     return X,Y
 
+def generate_images_from_chess_files2(file_names):
+    x_list=[]
+    y_list=[]
+    for f in file_names:
+        img=open_image(f)
+        X = squares_of_board(img, offset_x=40, offset_y=100, board_size=400,random_noise=False)
+        print "X.shape",X.shape
+        im_total = image_grid(X, num_rows=8, num_cols=8, w=50, h=50, margin=0)
+        print "im_total",im_total.shape
+        X = im_total[:,:,:3].reshape(1,400,400,3)
+        points = get_image_type_points(im_total, f, TYPES)
+        dict_indexs = indexs_from_mosaic_points_dict(points, w=50, h=50)
+        Y = np.zeros((1,8,8, 13))
+        for i, t in enumerate(TYPES):
+            for j in dict_indexs[t]:
+                row=j/8
+                col=j%8
+                Y[0,row,col,i]=1
+        x_list.append(X)
+        y_list.append(Y)
+    X = np.concatenate(x_list)
+    Y = np.concatenate(y_list)
+    return X, Y
+
+
+def generate_localization_data_from_files(file_names,M=30000,percent_negative_filter=12,im_size=40):
+    x_list=[]
+    y_list=[]
+    for f in file_names:
+        img=open_image(f,file_type=1)
+        red_points = ImagePoints(img)
+        red_points.load(f)
+        green_points = ImagePoints(img, '#00FF00', '#00FF00')
+        generate_random_points_with_probs(red_points, green_points, M=M, percent_negative_filter=percent_negative_filter)
+        X, Y = dataset_from_points(green_points,im_size)
+        x_list.append(X)
+        y_list.append(Y)
+
+    X = np.concatenate(x_list)
+    Y = np.concatenate(y_list)
+    return X,Y
+
+def dist(x1,x2,y1,y2):
+    return ((x1-x2)**2 + (y1-y2)**2)**0.5
+
+def group(values):
+    import numpy as np
+    values = np.array(values)
+    values.sort()
+    dif = np.ones(values.shape,values.dtype)
+    dif[1:] = np.diff(values)
+    idx = np.where(dif>0)
+    vals = values[idx]
+    count = np.diff(idx)
+    return vals
+
+def cluster_points(x_arr, y_arr, dist_th=10, clust_th=10):
+    clusters=np.ones((x_arr.shape[0],))*-1
+    for i in range(x_arr.shape[0]):
+        dists=dist(x_arr, x_arr[i], y_arr, y_arr[i])
+        dist_filter=dists<=dist_th
+        without_cluster=np.logical_and(dist_filter,clusters==-1)
+        clusters[without_cluster]=i
+        different_clusters=group(clusters[dist_filter])
+        for c in different_clusters:
+            clusters[clusters==c]=i
+    clust=group(clusters)
+    x_arr2=[]
+    y_arr2=[]
+    for c in clust:
+        if clusters[clusters==c].shape[0]>clust_th:
+            x_arr2.append(np.mean(x_arr[clusters == c]))
+            y_arr2.append(np.mean(y_arr[clusters == c]))
+    x_arr=np.array(x_arr2)
+    y_arr=np.array(y_arr2)
+    return x_arr,y_arr
+
+def vects_from_to(x1,x2,y1,y2):
+    return x2-x1,y2-y1
+
+
+def fit_board(frame):
+    '''
+    returns the coordinates in order NW -> NE -> SW -> SE
+    '''
+    red_points=ImagePoints(frame)
+    green_points=ImagePoints(frame, '#00FFFF', '#00FFFF')
+    y,x=np.where(np.logical_and(frame[:,:,0]==0,frame[:,:,1]==255,frame[:,:,2]==0))
+    x=np.array(x,dtype=np.float64)
+    y=np.array(y,dtype=np.float64)
+    x,y=cluster_points(x, y, dist_th=10, clust_th=10)
+    red_points.set_data(x,y)
+    near_point=np.argmin(dist(x,0,y,0))
+    far_point=np.argmax(dist(x,0,y,0))
+    near_far_vect_x,near_far_vect_y=vects_from_to(x[near_point],x[far_point],y[near_point],y[far_point])
+    new_near_x=x[near_point]+near_far_vect_x*0.04
+    new_near_y=y[near_point]+near_far_vect_y*0.04
+    new_far_x=x[near_point]+near_far_vect_x*0.96
+    new_far_y=y[near_point]+near_far_vect_y*0.96
+    rest_points={0,1,2,3}-{near_point,far_point}
+    p1 = rest_points.pop()
+    p2 = rest_points.pop()
+    if dist(x[p1],0,y[p1],0)>dist(x[p2],0,y[p2],0):
+        aux=p1
+        p2=p1
+        p1=aux
+    p1_p2_vec_x,p1_p2_vec_y=vects_from_to(x[p1],x[p2],y[p1],y[p2])
+    p1_new_x=x[p1]+p1_p2_vec_x*0.05
+    p2_new_x=x[p1]+p1_p2_vec_x*0.97
+    p1_new_y=y[p1]+p1_p2_vec_y*0.05
+    p2_new_y=y[p1]+p1_p2_vec_y*0.97
+    green_points.set_data([new_near_x,p1_new_x,p2_new_x,new_far_x],[new_near_y,p1_new_y,p2_new_y,new_far_y])
+    return red_points,green_points
+
+def generate_board_intersections_from_corners(x,y):
+    ab_listx, ab_listy = compute_n_divisions(8, x[0], x[1], y[0], y[1])
+    cd_listx, cd_listy = compute_n_divisions(8, x[2], x[3], y[2], y[3])
+    resultx=[]
+    resulty=[]
+    for i in range(9):
+        xl,yl=compute_n_divisions(8,ab_listx[i],cd_listx[i],ab_listy[i],cd_listy[i])
+        resultx+=xl
+        resulty+=yl
+    return resultx,resulty
+
+
+def compute_n_divisions(parts, pxa, pxb, pya, pyb):
+    vxab = pxb - pxa
+    vyab = pyb - pya
+    ab_listx = []
+    ab_listy = []
+    for i in range(parts + 1):
+        ab_listx.append(pxa + vxab * 1. / float(parts) * (i))
+        ab_listy.append(pya + vyab * 1. / float(parts) * (i))
+    return ab_listx, ab_listy
+
+
+def generate_points_data_from_video(file_name,num_frames,random_frames=True):
+    reader = imageio.get_reader('chess.mov')
+    frame_list = [x.reshape(1, *x.shape) for x in reader]
+    len(frame_list)
+    X = np.concatenate(frame_list)
+    del frame_list
+    for i in range(num_frames):
+        if random_frames:
+            q=random.randint(0,X.shape[0]-1)
+        else:
+            q=i
+        red_points, green_points = fit_board(X[q])
+        
 
