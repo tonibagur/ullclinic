@@ -12,6 +12,7 @@ import numpy as np
 import matplotlib.image as mpimg
 import scipy
 import random
+import imageio
 
 
 TYPES=['white_pawns',
@@ -118,11 +119,12 @@ def visualize_image(img, points_objs, points_var):
     t2 = show(p3, notebook_handle=True)
     return t2
 
-def generate_random_points_with_probs(points_in,points_out, M=10000, percent_negative_filter=5,im_size=40):
+def generate_random_points_with_probs(points_in,points_out, M=10000, percent_negative_filter=5,im_size=40,dist_max=None):
     x_arr = np.array(points_in.x)
     y_arr = np.array(points_in.y)
     stride = im_size / 2
-    dist_max = im_size / 4
+    if not dist_max:
+        dist_max = im_size / 4
     x_rand = np.random.randint(int(stride), points_in.n2 - int(stride), size=M)
     y_rand = np.random.randint(int(stride), points_in.n1 - int(stride), size=M)
     dists = np.zeros(M)
@@ -131,16 +133,16 @@ def generate_random_points_with_probs(points_in,points_out, M=10000, percent_neg
 
     probs = (dist_max - np.min(np.concatenate([dists.reshape(M, 1), np.ones((M, 1)) * dist_max], axis=1),
                                axis=1)) > 0  # /float(dist_max)
-    print probs
+    #print probs
     prob_select = (probs == 0.) * np.random.randint(0, 100, size=M)
-    print prob_select
+    #print prob_select
     probs = probs[prob_select < percent_negative_filter]
     x_rand = x_rand[prob_select < percent_negative_filter]
     y_rand = y_rand[prob_select < percent_negative_filter]
     M = x_rand.shape[0]
-    print np.mean(probs)
-    print np.sum(prob_select < percent_negative_filter)
-    print x_rand.shape
+    #print np.mean(probs)
+    #print np.sum(prob_select < percent_negative_filter)
+    #print x_rand.shape
 
     points_out.set_data(x_rand,y_rand,probs)
 
@@ -156,7 +158,7 @@ def dataset_from_points(points,im_size=40):
     X = np.concatenate(x_list)
     Y = np.concatenate(y_list).reshape(len(points.x), 1)
     Y = np.concatenate([Y, 1 - Y], axis=1)
-    print X.shape, Y.shape
+    #print X.shape, Y.shape
     return X,Y
 
 def squares_of_board(image, offset_x=40, offset_y=100, board_size=400,random_noise=False):
@@ -409,22 +411,23 @@ def fit_board(frame):
     near_point=np.argmin(dist(x,0,y,0))
     far_point=np.argmax(dist(x,0,y,0))
     near_far_vect_x,near_far_vect_y=vects_from_to(x[near_point],x[far_point],y[near_point],y[far_point])
-    new_near_x=x[near_point]+near_far_vect_x*0.04
-    new_near_y=y[near_point]+near_far_vect_y*0.04
-    new_far_x=x[near_point]+near_far_vect_x*0.96
-    new_far_y=y[near_point]+near_far_vect_y*0.96
+    new_near_x=x[near_point]+near_far_vect_x*0.035
+    new_near_y=y[near_point]+near_far_vect_y*0.05
+    new_far_x=x[near_point]+near_far_vect_x*0.95
+    new_far_y=y[near_point]+near_far_vect_y*0.97
     rest_points={0,1,2,3}-{near_point,far_point}
     p1 = rest_points.pop()
     p2 = rest_points.pop()
+    #print "x",x,"y",y
     if dist(x[p1],0,y[p1],0)>dist(x[p2],0,y[p2],0):
         aux=p1
         p2=p1
         p1=aux
     p1_p2_vec_x,p1_p2_vec_y=vects_from_to(x[p1],x[p2],y[p1],y[p2])
-    p1_new_x=x[p1]+p1_p2_vec_x*0.05
-    p2_new_x=x[p1]+p1_p2_vec_x*0.97
-    p1_new_y=y[p1]+p1_p2_vec_y*0.05
-    p2_new_y=y[p1]+p1_p2_vec_y*0.97
+    p1_new_x=x[p1]+p1_p2_vec_x*0.06
+    p2_new_x=x[p1]+p1_p2_vec_x*0.98
+    p1_new_y=y[p1]+p1_p2_vec_y*0.04
+    p2_new_y=y[p1]+p1_p2_vec_y*0.98
     green_points.set_data([new_near_x,p1_new_x,p2_new_x,new_far_x],[new_near_y,p1_new_y,p2_new_y,new_far_y])
     return red_points,green_points
 
@@ -451,17 +454,27 @@ def compute_n_divisions(parts, pxa, pxb, pya, pyb):
     return ab_listx, ab_listy
 
 
-def generate_points_data_from_video(file_name,num_frames,random_frames=True):
-    reader = imageio.get_reader('chess.mov')
-    frame_list = [x.reshape(1, *x.shape) for x in reader]
-    len(frame_list)
-    X = np.concatenate(frame_list)
-    del frame_list
+def generate_points_data_from_video(video,num_frames=100,random_frames=True,im_size=40,percent_negative_filter=5,num_points=30000,dist_max=10):
+    x_list=[]
+    y_list=[]
+    if not num_frames:
+        num_frames=video.shape[0]
     for i in range(num_frames):
         if random_frames:
-            q=random.randint(0,X.shape[0]-1)
+            q=random.randint(0,video.shape[0]-1)
         else:
             q=i
-        red_points, green_points = fit_board(X[q])
-        
+        try:
+            red_points, green_points = fit_board(video[q])
+            red_points.set_data(*generate_board_intersections_from_corners(green_points.x, green_points.y))
+            generate_random_points_with_probs(red_points, green_points, M=num_points, percent_negative_filter=percent_negative_filter,im_size=im_size,dist_max=dist_max)
+            Xtemp, Ytemp = dataset_from_points(green_points, im_size=im_size)
+            x_list.append(Xtemp)
+            y_list.append(Ytemp)
+            #print Xtemp.shape,Ytemp.shape
+        except:
+            print "Ignoring frame q, possibly a problem locating the green points happened"
+            import traceback;traceback.print_exc()
+    return np.concatenate(x_list),np.concatenate(y_list)
+
 
