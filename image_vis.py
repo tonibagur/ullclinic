@@ -406,7 +406,9 @@ def fit_board(frame):
     y,x=np.where(np.logical_and(frame[:,:,0]==0,frame[:,:,1]==255,frame[:,:,2]==0))
     x=np.array(x,dtype=np.float64)
     y=np.array(y,dtype=np.float64)
-    x,y=cluster_points(x, y, dist_th=10, clust_th=10)
+    x,y=cluster_points(x, y, dist_th=10, clust_th=2)
+    #green_points.set_data(x, y)
+    #return red_points, green_points
     red_points.set_data(x,y)
     near_point=np.argmin(dist(x,0,y,0))
     far_point=np.argmax(dist(x,0,y,0))
